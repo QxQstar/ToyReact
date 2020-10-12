@@ -5,6 +5,13 @@ class ElementNodeWrapper {
         this.root = document.createElement(tag);
     }
     setAttribute(name,value) {
+        if (name === 'className') {
+            name = 'class';
+        } else if(name.match(/^on([\s\S]+)/)) {
+            const eventName = RegExp.$1.replace(/([\s\S])/,c => c.toLocaleLowerCase())
+            this.root.addEventListener(eventName, value, false)
+            return 
+        }
         this.root.setAttribute(name,value);
     }
     appendChild(component) {
@@ -17,7 +24,6 @@ class ElementNodeWrapper {
         range.deleteContents()
         range.insertNode(this.root)
     }
-
 }
 
 class TextNodeWrapper {
@@ -33,9 +39,26 @@ class TextNodeWrapper {
 export class Component {
     constructor() {
         this._range = null;
+        this.state = null
         this.props = Object.create(null)
         this.children = []
-        this._root = null
+    }
+    setState(newState) {
+        if(this.state === null || typeof this.state !== 'object') {
+            this.state = {};
+        }
+        const merge = (oldState, newState) => {
+            for (const key in newState) {
+                if(oldState[key] !== null && typeof oldState[key] === 'object') {
+                    merge(oldState[key], newState[key])
+                } else {
+                    oldState[key] = newState[key]
+                }
+            }
+        }
+
+        merge(this.state, newState)
+        this.rerender()
     }
     setAttribute(name,value) {
         this.props[name] = value
@@ -46,6 +69,9 @@ export class Component {
     [RENDER_TO_DOM](range) {
         this._range = range
         this.render()[RENDER_TO_DOM](range)
+    }
+    rerender() {
+        this[RENDER_TO_DOM](this._range)
     }
 }
 
@@ -70,6 +96,9 @@ export function createElement(type,attrs,...children) {
     }
     function insertChildren(children) {
         for(let child of children) {
+            if(child === null) {
+                continue;
+            }
             if(typeof child === 'string') {
                 child = new TextNodeWrapper(child)
             }
