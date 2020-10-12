@@ -1,6 +1,7 @@
 module.exports = {
     entry: {
-        main: './src/main.js'
+        leason1main: './src/leason1/main.js',
+        leason2main: './src/leason2/main.js'
     },
     mode: 'development',
     optimization: {
