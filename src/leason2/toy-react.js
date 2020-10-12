@@ -5,12 +5,13 @@ class ElementNodeWrapper {
         this.root = document.createElement(tag);
     }
     setAttribute(name,value) {
-        if (name === 'className') {
-            name = 'class';
-        } else if(name.match(/^on([\s\S]+)/)) {
+        if(name.match(/^on([\s\S]+)/)) {
             const eventName = RegExp.$1.replace(/([\s\S])/,c => c.toLocaleLowerCase())
             this.root.addEventListener(eventName, value, false)
             return 
+        }
+        if (name === 'className') {
+            name = 'class';
         }
         this.root.setAttribute(name,value);
     }
@@ -45,7 +46,9 @@ export class Component {
     }
     setState(newState) {
         if(this.state === null || typeof this.state !== 'object') {
-            this.state = {};
+            this.state = newState;
+            this.rerender()
+            return ;
         }
         const merge = (oldState, newState) => {
             for (const key in newState) {
@@ -71,6 +74,7 @@ export class Component {
         this.render()[RENDER_TO_DOM](range)
     }
     rerender() {
+        this._range.deleteContents()
         this[RENDER_TO_DOM](this._range)
     }
 }
