@@ -2,7 +2,9 @@ const RENDER_TO_DOM = Symbol('render to dom')
 export class Component {
     constructor() {
         this._range = null;
-        this.state = null
+        this.state = null;
+        // 旧的 vdom
+        this._vdom = null;
         this.props = Object.create(null)
         this.children = []
     }
@@ -26,7 +28,65 @@ export class Component {
         }
 
         merge(this.state, newState)
-        this.rerender()
+        this.update()
+    }
+    update() {
+        function isSameNode(oldNode, newNode) {
+            if(oldNode.type !== newNode.type) {
+                return false
+            }
+
+            if(newNode.type === '#text' && newNode.content !== oldNode.content) {
+                return false
+            }
+
+            for (const name in newNode.props) {
+                if(oldNode[name] !== newNode[name]) {
+                    return false
+                }
+            }
+            if (Object.keys(newNode.props).length < Object.keys(oldNode.props).length) {
+                return false
+            }
+
+            return true
+        }
+        const update = (oldNode, newNode) => {
+            if (!isSameNode(oldNode, newNode)) {
+                newNode[RENDER_TO_DOM](oldNode._range)
+                return;
+            }
+            newNode._range = oldNode._range
+
+            const newChildren = newNode.vChildren;
+            const oldChildren = oldNode.vChildren;
+
+            if(!newChildren || newChildren.length === 0) {
+                return 
+            }
+            // 遗留问题：如果 oldChildren 为空数组怎么解决？
+            let tailRange = oldChildren[oldChildren.length - 1]._range
+
+            for (let i = 0; i < newChildren.length; i++) {
+                let newChild = newChildren[i];
+                let oldChild = oldChildren[i];
+
+                if(i < oldChildren.length) {
+                    update(oldChild, newChild)
+                } 
+                // 如果 newChildren 的长度大于 oldChildren的长度
+                else { 
+                    let range = document.createRange()
+                    range.setStart(tailRange.endContainer, tailRange.endOffset);
+                    range.setEnd(tailRange.endContainer, tailRange.endOffset);
+                    newChild[RENDER_TO_DOM](range)
+                    tailRange = range;
+                }
+            }
+        }
+        const vdom = this.vdom;
+        update(this._vdom,vdom);
+        this._vdom = vdom;
     }
     setAttribute(name,value) {
         this.props[name] = value
@@ -36,11 +96,8 @@ export class Component {
     }
     [RENDER_TO_DOM](range) {
         this._range = range
-        this.render()[RENDER_TO_DOM](range)
-    }
-    rerender() {
-        this._range.deleteContents()
-        this[RENDER_TO_DOM](this._range)
+        this._vdom = this.vdom;
+        this._vdom[RENDER_TO_DOM](range)
     }
 }
 class ElementNodeWrapper extends Component{
@@ -49,15 +106,12 @@ class ElementNodeWrapper extends Component{
         this.type = tag
     }
     get vdom() {
-        return {
-            type: this.type,
-            props: this.props,
-            children: this.children.map(child => child.vdom)
-        }
+        this.vChildren = this.children.map(child => child.vdom);
+        return this;
     }
     [RENDER_TO_DOM](range) {
         const root = document.createElement(this.type);
-
+        range.deleteContents()
         // setAttribute
         for (const name in this.props) {
             const value = this.props[name]
@@ -74,14 +128,16 @@ class ElementNodeWrapper extends Component{
         }
 
         // appendChild
-        for (const child of this.children) {
+        if (!this.vChildren) {
+            this.children.map(child => child.vdom);
+        }
+        for (const child of this.vChildren) {
             const childRange = document.createRange()
             childRange.setStart(root, root.childNodes.length)
             childRange.setEnd(root, root.childNodes.length)
             child[RENDER_TO_DOM](childRange)
         }
-
-        range.deleteContents()
+        this._range = range;
         range.insertNode(root)
     }
 }
@@ -93,14 +149,12 @@ class TextNodeWrapper extends Component{
         this.content = content
     }
     get vdom() {
-        return {
-            type: this.type,
-            content: this.content
-        }
+        return this;
     }
     [RENDER_TO_DOM](range) {
         const root = document.createTextNode(this.content)
         range.deleteContents()
+        this._range = range;
         range.insertNode(root)
     }
 }
